@@ -26,10 +26,10 @@ def speak(sentence: str):
     engine.runAndWait()
 
 
-# Звуковое сопровождение интерфейса:
+# Звуковое сопровождение интерфейса (синхронизировано с открытием диалогового окна):
 engine = pyttsx3.init()
-t1 = threading.Thread(target=speak, args=['Выберите текстовый файл.'])
-t1.start()
+t = threading.Thread(target=speak, args=['Выберите текстовый файл.'])
+t.start()
 
 # Пользовательский ввод пути к файлу:
 root = tk.Tk()
@@ -56,7 +56,7 @@ else:
         cur_page = memory[file_path]
 
 # Звуковое сопровождение интерфейса:
-t1.join()
+t.join()
 speak('Выполняется обработка.')
 
 
@@ -64,7 +64,7 @@ def load_text(path: str):
     """Функция извлекает текст из файла
     и преобразует в список строк постранично."""
 
-    global content, n_pages
+    global content, cur_page, n_pages
 
     # Если файл не выбран, озвучиваем рекомендацию
     # для пользователя и завершаем программу:
@@ -86,20 +86,26 @@ def load_text(path: str):
                         break
                     content.append(data)
             n_pages = len(content)
+            # Если пользователь сохранил новый текст под названием,
+            # которое уже есть в памяти ридера, и возникла ошибка индексации:
+            if cur_page >= n_pages:
+                cur_page = 0
 
         # Для файлов в формате .pdf и аналогичных:
         elif extension in ['.pdf', '.xps', '.oxps', '.epub', '.cbz', '.fb2']:
             doc = fitz.open(path)
             n_pages = doc.pageCount
+            if cur_page >= n_pages:
+                cur_page = 0
 
             for page in range(n_pages):
-                cur_page = doc.loadPage(page)
-                cur_text = cur_page.getText('text')
+                current_page = doc.loadPage(page)
+                cur_text = current_page.getText('text')
                 content.append(cur_text)
 
     # При возникновении ошибок обработки файла, озвучиваем
     # рекомендацию для пользователя и завершаем программу:
-    except Exception as e:
+    except Exception:
         speak('Произошла ошибка при обработке файла. Попробуйте запустить программу еще раз и выбрать другой файл.')
         exit()
 
@@ -119,6 +125,7 @@ text_to_audio_file()
 
 # При загрузке аудиофайла через pygame.mixer.load
 # мы теряем возможность перезаписывать содержимое файла.
+# Опция pygame.mixer.music.unload не работает.
 # Создаем переменную, которая позволит освобождать файл
 # для записи следующих страниц текста:
 audio_file = open('reader_audio.wav')
@@ -134,20 +141,15 @@ def play_audio():
 def pause_audio():
     """Функция приостанавливает и возобновляет воспроизведение
     аудиофайла. Вызывается нажатием клавиши 'p' на клавиатуре."""
+
     global pause
+
     if not pause:
         pygame.mixer.music.pause()
         pause = True
     else:
         pygame.mixer.music.unpause()
         pause = False
-
-
-def change_page():
-    """Функция изменяет номер текущей страницы.
-    Вызывается нажатием клавиши 'm' на клавиатуре."""
-    global cur_page
-    new_page = ''
 
 
 # Настройки pygame:
@@ -172,21 +174,22 @@ instruction_5 = 'q - закрыть окно программы'
 
 header_font = pygame.font.SysFont('arial', 50)
 text_font = pygame.font.SysFont('arial', 40)
+text_color = (0, 0, 0)
 
-text_header = header_font.render(instruction_header, True, (0, 0, 0))
-text_1 = text_font.render(instruction_1, True, (0, 0, 0))
-text_2 = text_font.render(instruction_2, True, (0, 0, 0))
-text_3 = text_font.render(instruction_3, True, (0, 0, 0))
-text_4 = text_font.render(instruction_4, True, (0, 0, 0))
-text_5 = text_font.render(instruction_5, True, (0, 0, 0))
+text_header = header_font.render(instruction_header, True, text_color)
+text_1 = text_font.render(instruction_1, True, text_color)
+text_2 = text_font.render(instruction_2, True, text_color)
+text_3 = text_font.render(instruction_3, True, text_color)
+text_4 = text_font.render(instruction_4, True, text_color)
+text_5 = text_font.render(instruction_5, True, text_color)
 
 # Текущая позиция в текстовом файле:
 position = f'Страница {cur_page + 1} из {n_pages}'
-position_display = header_font.render(position, 1, (0, 0, 0))
+position_display = header_font.render(position, True, text_color)
 
 # Событие, выполняемое по окончании воспроизведения аудио:
-SONG_FINISHED = pygame.USEREVENT + 1
-pygame.mixer.music.set_endevent(SONG_FINISHED)
+audio_finished = pygame.USEREVENT + 1
+pygame.mixer.music.set_endevent(audio_finished)
 
 # Звуковое сопровождение интерфейса (инструкция для пользователя):
 audio_instruction = '''Для начала прослушивания текста нажмите клавишу s.
@@ -220,17 +223,94 @@ def window_contents():
     pygame.display.flip()
 
 
+def page_entry() -> str:
+    """Функция обрабатывает пользовательский ввод номера страницы
+    с клавиатуры. Вызывается нажатием клавиши 'c'. Формирует и
+    возвращает строку, содержащую номер страницы. Сигналом
+    к завершению ввода служит нажатие клавиши 'm'."""
+
+    global position_display
+
+    new_page = ''
+
+    typing = True
+    while typing:
+
+        for page_event in pygame.event.get():
+
+            if page_event.type == pygame.KEYDOWN:
+
+                if page_event.key == pygame.K_m:  # Окончание ввода номера страницы
+                    typing = False
+
+                elif page_event.key == pygame.K_BACKSPACE:  # Убрать последний введенный символ
+                    if len(new_page) > 0:
+                        new_page = new_page[:-1]
+                        position = f'Страница {new_page} из {n_pages}'
+                        position_display = header_font.render(position, True, text_color)
+                        window_contents()
+
+                else:  # Ввод номера страницы
+                    entry = pygame.key.name(page_event.key)
+
+                    if len(entry) == 3 and entry[1] in '0123456789':
+                        new_page += entry[1]
+                        position = f'Страница {new_page} из {n_pages}'
+                        position_display = header_font.render(position, True, text_color)
+                        window_contents()
+
+    return new_page
+
+
+def check_page(page: str):
+    """Функция проверяет корректность введенной пользователем страницы."""
+    # Если пользователь ввел номер страницы,
+    # проверяем, что такая страница есть в файле:
+
+    global cur_page, audio_file, pause
+
+    if len(page) > 0:
+        new_ind = int(page) - 1
+
+        if 0 <= new_ind <= n_pages - 1:
+            cur_page = new_ind
+            speak(f'Перехожу к странице {page}')
+            audio_file.close()
+            text_to_audio_file()
+            audio_file = open('reader_audio.wav')
+            play_audio()
+            pause = False
+
+        else:
+            speak(f'В файле нет страницы {page}. Нажмите c, введите номер страницы. В конце нажмите m.')
+    # Если получена пустая строка:
+    else:
+        speak('Не указан номер страницы. Нажмите c, введите номер страницы. В конце нажмите m.')
+
+
+def next_page():
+    """Функция осуществляет переход к следующей странице
+    при завершении воспроизведения аудиофайла текущей страницы."""
+
+    global cur_page, position_display, audio_file
+
+    cur_page += 1
+    position = f'Страница {cur_page + 1} из {n_pages}'
+    position_display = header_font.render(position, True, text_color)
+    audio_file.close()
+    text_to_audio_file()
+    audio_file = open('reader_audio.wav')
+    play_audio()
+
+
 def window_manager():
     """Функция обеспечивает воспроизведение аудиофайла,
     мониторинг страниц текста и их преобразование в аудио,
     обрабатывает команды пользовательского ввода с клавиатуры."""
 
-    global cur_page, position_display, audio_file, pause
-
     clock = pygame.time.Clock()
 
     done = False
-
     while not done:
 
         for event in pygame.event.get():
@@ -253,64 +333,19 @@ def window_manager():
                 elif event.key == pygame.K_q:  # 'q' - закрыть окно программы
                     done = True
 
-                elif event.key == pygame.K_c:  # 'm' - изменить текущую страницу
-                    new_page = ''
-
-                    typing = True
-                    while typing:
-
-                        for page_event in pygame.event.get():
-
-                            if page_event.type == pygame.KEYDOWN:
-
-                                if page_event.key == pygame.K_m:  # Окончание ввода номера страницы
-                                    typing = False
-
-                                elif page_event.key == pygame.K_BACKSPACE:  # Убрать последний введенный символ
-                                    if len(new_page) > 0:
-                                        new_page = new_page[:-1]
-                                        position = f'Страница {new_page} из {n_pages}'
-                                        position_display = header_font.render(position, 1, (0, 0, 0))
-                                        window_contents()
-
-                                else:  # Ввод номера страницы
-                                    entry = pygame.key.name(page_event.key)
-
-                                    if len(entry) == 3 and entry[1] in '0123456789':
-                                        new_page += entry[1]
-                                        position = f'Страница {new_page} из {n_pages}'
-                                        position_display = header_font.render(position, 1, (0, 0, 0))
-                                        window_contents()
-
-                    # Если пользователь ввел номер страницы,
-                    # проверяем, что такая страница есть в файле:
-                    if len(new_page) > 0:
-                        new_ind = int(new_page) - 1
-
-                        if new_ind <= n_pages - 1:
-                            cur_page = int(new_page) - 1
-                            speak(f'Перехожу к странице {new_page}')
-                            audio_file.close()
-                            text_to_audio_file()
-                            audio_file = open('reader_audio.wav')
-                            play_audio()
-                            pause = False
-
-                        else:
-                            speak(f'В файле нет страницы {new_page}. Нажмите c, введите номер страницы. В конце нажмите m.')
-                    # Если получена пустая строка:
-                    else:
-                        speak('Не указан номер страницы. Нажмите c, введите номер страницы. В конце нажмите m.')
+                elif event.key == pygame.K_c:  # 'c' - изменить текущую страницу
+                    # Обрабатываем пользовательский ввод:
+                    new_page = page_entry()
+                    # Проверяем корректность полученного номера:
+                    check_page(new_page)
 
             # Завершение воспроизведения текущей страницы:
-            elif event.type == SONG_FINISHED:
-                cur_page += 1
-                position = f'Страница {cur_page + 1} из {n_pages}'
-                position_display = header_font.render(position, 1, (0, 0, 0))
-                audio_file.close()
-                text_to_audio_file()
-                audio_file = open('reader_audio.wav')
-                play_audio()
+            elif event.type == audio_finished:
+                # Если это не последняя страница текста:
+                if cur_page < n_pages - 1:
+                    next_page()
+                else:
+                    done = True
 
         window_contents()
         clock.tick(30)
