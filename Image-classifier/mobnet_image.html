@@ -1,0 +1,51 @@
+﻿<!DOCTYPE html>
+
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Image Classifier with MobileNet</title>
+    <style>
+        .button {
+            background-color: #2936f0;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+        }
+        p.sansserif {
+            font-family: Arial, Arial, sans-serif;
+        }
+        ul.a {
+           font-family: Arial, Arial, sans-serif;
+        }
+
+    </style>
+    <!-- Load the latest version of TensorFlow.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+</head>
+<body bgcolor="#a6f6f7">
+    <h1 id="header">Image Classifier</h1>
+    <HR>
+    <p class="sansserif">Welcome to Image Classifier app!</p>
+    <p class="sansserif">Please, select an image from anywhere on the web. MobileNet model will label it for you!</p>
+    <ul class="a">
+        <li>Click "New image" to enter a URL.</li>
+        <li>Click "Classify" to see the label.</li>
+    </ul>
+    <BR>
+    <div id="console"></div>
+    <!-- Add a default image -->
+    <img id="img" crossorigin src="https://i.imgur.com/JlUvsxa.jpg" width="227" height="227" />
+    <p class="sansserif" id="label">Loading model...</p>
+    <button class="button" id="classify">Classify</button>
+    <button class="button" id="entry">New image</button>
+    <!-- Load script after the content of the page -->
+    <script src="image_classifier.js"></script>
+</body>
+</html>
