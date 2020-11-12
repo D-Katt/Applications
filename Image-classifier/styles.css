@@ -1,0 +1,91 @@
+* {
+    font-family: Arial, Arial, sans-serif;
+    font-weight: normal;
+    font-style: normal;
+    box-sizing: border-box;
+    color: #303030;
+}
+
+body {
+    background-color: #a6f6f7;
+    margin: 0;
+    padding: 0;
+}
+
+header, section {
+    background: linear-gradient( #a6f6f7, white)
+}
+
+header {
+    margin: 0;
+    padding: 0;
+}
+
+h1 {
+    font-size: 3vw;
+    margin: 0;
+    padding: 10px 10px;
+}
+
+p, ul {
+    font-size: 1.5vw;
+    margin: 1vw;
+}
+
+.head_div {
+    display: flex;
+    align-content: center;
+    justify-content: center;
+    align-items: center;
+    justify-items: center;
+    margin: 0 0;
+    padding: 0 0;
+}
+
+.head_img{
+    width: 60px;
+    margin: 0px;
+    padding: 10px 10px;
+    border-radius: 15px;
+}
+
+#img, #label {
+    margin: 1vw 10vw;
+}
+
+.description, .results {
+    display: flex;
+    flex-direction: column;
+    align-content: flex-start;
+    justify-content: center;
+    align-items: flex-start;
+    justify-items: flex-start;
+    padding: 0px 3vw;
+    max-width: 80vw;
+}
+
+.manage {
+    display: flex;
+    align-content: center;
+    justify-content: center;
+    align-items: center;
+    justify-items: center;
+    padding: 0px 0px;
+}
+
+#file, .button {
+    background-color: #2936f0;
+    border: none;
+    color: white;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 2vw;
+    margin: 10px 10px;
+    padding: 10px 10px;
+    cursor: pointer;
+}
+
+#file:hover, .button:hover {
+    background-color: rgba(52, 140, 235, .9);
+}
