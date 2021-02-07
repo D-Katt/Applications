@@ -26,6 +26,7 @@
 """
 
 import gui  # Модуль пользовательского интерфейса
+from gui import function_info
 
 import pandas as pd
 import numpy as np
@@ -58,10 +59,12 @@ class Estimation:
     """Класс для расчета показателей экономической эффективности
     проекта строительства жилого комплекса."""
 
+    @function_info
     def __init__(self, pars: dict):
         self.parameters = pars
         self.estimate_project()
 
+    @function_info
     def estimate_project(self):
         """Главная функция класса, агрегирует вызовы всех других функций,
         сохраняет таблицу с расчетами в файл формата Excel."""
@@ -75,21 +78,24 @@ class Estimation:
         self.get_metrics()
         self.save_results()
 
+    @function_info
     def get_quarterly_rates(self):
         """Функция производит расчет квартальных ставок."""
         for rate in ('inflation', 'discount_rate'):
             self.parameters[f'{rate}_quarterly'] = self.parameters[f'{rate}_annual'] ** (1 / 4)
 
+    @function_info
     def split_to_phases(self):
         """Функция определяет количество очередей строительства
         и объем одной очереди в зависимости от ценового класса проекта."""
         self.parameters['price_segment'] = 'mass_market' if parameters['start_price'] < 120_000 else 'upper_class'
         phase_limit = assumptions[self.parameters['price_segment']]['max_phase_size']
         self.parameters['n_phases'] = int(self.parameters['apartment_area'] // phase_limit) + 1
-        self.parameters['phase_floor_area'] = self.parameters['floor_area'] / self.parameters['n_phases']
-        self.parameters['phase_apartment_area'] = self.parameters['apartment_area'] / self.parameters['n_phases']
+        self.parameters['phase_floor_area'] = int(self.parameters['floor_area'] / self.parameters['n_phases'])
+        self.parameters['phase_apartment_area'] = int(self.parameters['apartment_area'] / self.parameters['n_phases'])
         print(f'Количество очередей строительства: {self.parameters["n_phases"]}')
 
+    @function_info
     def phase_sales_period(self):
         """Функция определяет период реализации квартир в одной очереди проекта."""
         min_price, max_price = assumptions[self.parameters['price_segment']]['price_range']
@@ -105,6 +111,7 @@ class Estimation:
                                              'n_quarters'].values[0]))
         print(f'Период продаж одной очереди: {self.sales_period} кварталов')
 
+    @function_info
     def sales_sqm(self):
         """Функция вычисляет продаваемую площадь квартир по кварталам в рамках одной очереди."""
         # Гамма-распределение с пиком на границе 1/3 строительного цикла:
@@ -115,9 +122,10 @@ class Estimation:
         y_normalized = y / np.sum(y)  # Продажи по кварталам в долях от 1
         # Датафрейм, где номеру квартала соответствует продаваемая площадь:
         self.sales_distribution = pd.DataFrame({'quarter': [q for q in range(1, self.sales_period + 1)]})
-        self.sales_distribution['sales_sqm'] = self.parameters['apartment_area'] * y_normalized
+        self.sales_distribution['sales_sqm'] = self.parameters['phase_apartment_area'] * y_normalized
         self.plot_sales()
 
+    @function_info
     def plot_sales(self):
         """Функция формирует и сохраняет в файл график продаж одной очереди."""
         plt.bar(self.sales_distribution['quarter'], self.sales_distribution['sales_sqm'])
@@ -133,6 +141,7 @@ class Estimation:
         plt.savefig('sales.png', dpi=300)
         plt.show()
 
+    @function_info
     def price_indexes(self):
         """Функция оценивает индексы роста цен по отношению к цене на старте продаж
         для всего периода реализации квартир в рамках одной очереди проекта."""
@@ -155,6 +164,7 @@ class Estimation:
             self.cash_flow = self.cash_flow.append(after_completion[['quarter', 'price_index', 'status']],
                                                    ignore_index=True)
 
+    @function_info
     def sales_rubles(self):
         """Функция подсчитывает денежные поступления от реализации квартир."""
         self.price_indexes()  # Индексы роста цен по кварталам
@@ -162,6 +172,7 @@ class Estimation:
         self.cash_flow['sales_sq_m'] = self.sales_distribution['sales_sqm']
         self.cash_flow['sales_rub'] = self.cash_flow['price'] * self.cash_flow['sales_sq_m']
 
+    @function_info
     def get_revenue(self):
         """Функция подсчитывает выручку при условии, что средства от реализации квартир
         становятся доступны в первый квартал после ввода дома в эксплуатацию."""
@@ -172,15 +183,19 @@ class Estimation:
         sales_before_completion = self.cash_flow.loc[:quarter_after_completion - 1, 'sales_rub'].sum()
         self.cash_flow.loc[quarter_after_completion, 'revenue'] += sales_before_completion
 
+    @function_info
     def get_expenses(self):
         """Функция подсчитывает затраты на реализацию проекта."""
         # Затраты на строительство распределены равномерно до ввода в эксплуатацию:
-        self.cash_flow['construction_costs'] = self.parameters['construction_costs'] * \
-                            self.parameters['floor_area'] / self.parameters['construction_period']
+        self.cash_flow['construction_costs'] = 0
+        self.cash_flow.loc[self.cash_flow['status'] == 'construction', 'construction_costs'] = \
+            self.parameters['construction_costs'] * self.parameters['phase_floor_area'] \
+            / self.parameters['construction_period']
         # Затраты на продвижение, рекламу, агентское вознаграждение - процентом от объема продаж:
         self.cash_flow['promotion'] = self.cash_flow['sales_rub'] * 0.06
         self.cash_flow['expenses'] = self.cash_flow['construction_costs'] + self.cash_flow['promotion']
 
+    @function_info
     def get_metrics(self):
         """Функция вычисляет NPV, период окупаемости
         и внутреннюю норму доходности проекта."""
@@ -194,16 +209,19 @@ class Estimation:
         self.parameters['NPV'] = int(self.cash_flow['DCF'].sum())  # NPV дисконтированного денежного потока
         self.parameters['PBP'] = self.cash_flow[self.cash_flow['CF_cumsum'] > 0]['quarter'].min()
         self.parameters['DPBP'] = self.cash_flow[self.cash_flow['DCF_cumsum'] > 0]['quarter'].min()
-        self.parameters['IRR'] = np.round(np.irr(self.cash_flow['DCF']), 3)
+        self.parameters['IRR'] = np.round(np.irr(self.cash_flow['CF']), 3)
         results = f'NPV = {self.parameters["NPV"]}\nPBP = {self.parameters["PBP"]} кварталов\n' \
                   f'DPBP = {self.parameters["DPBP"]} кварталов\nIRR = {self.parameters["IRR"]}'
         self.plot_CF(results)
 
+    @function_info
     def plot_CF(self, metrics: str):
         """Функция формирует и сохраняет в файл график с динамикой
         денежного потока и показателями экономической эффективности проекта."""
-        plt.bar(self.cash_flow['quarter'], self.cash_flow['CF_cumsum'], label='Накопленный денежный поток')
-        plt.bar(self.cash_flow['quarter'], self.cash_flow['DCF_cumsum'], label='Накопленный дисконтированный поток')
+        plt.bar(self.cash_flow['quarter'], self.cash_flow['CF_cumsum'],
+                width=0.4, label='Накопленный денежный поток')
+        plt.bar(self.cash_flow['quarter'] + 0.4, self.cash_flow['DCF_cumsum'],
+                width=0.4, label='Накопленный дисконтированный поток')
         plt.figtext(0.1, 0.2, metrics, fontweight="bold")
         plt.legend()
         plt.xlabel('Кварталы')
@@ -213,6 +231,7 @@ class Estimation:
         plt.savefig('cash_flow.png', dpi=300)
         plt.show()
 
+    @function_info
     def save_results(self):
         """Функция сохраняет результаты расчетов в файл Excel."""
         input_pars = pd.DataFrame(self.parameters, index=[0])
